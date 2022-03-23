@@ -10,6 +10,8 @@ import {
   SNTag,
   ChallengeReason,
   NoteViewController,
+  ApplicationEvent,
+  Uuids,
 } from '@standardnotes/snjs';
 import {
   makeObservable,
@@ -17,13 +19,20 @@ import {
   action,
   computed,
   runInAction,
+  autorun,
 } from 'mobx';
 import { WebApplication } from '../application';
 import { AppState } from './app_state';
 
+const PersistKey = 'notes-state';
+interface NotesStatePersistable {
+  selectedNotes: UuidString[];
+}
+
 export class NotesState {
   lastSelectedNote: SNNote | undefined;
-  selectedNotes: Record<UuidString, SNNote> = {};
+  selectedNotes: Record<UuidString, SNNote> = observable({});
+  selectedNoteIds: Set<UuidString> = observable(new Set<UuidString>());
   contextMenuOpen = false;
   contextMenuPosition: { top?: number; left: number; bottom?: number } = {
     top: 0,
@@ -57,19 +66,87 @@ export class NotesState {
       setShowProtectedWarning: action,
       setShowRevisionHistoryModal: action,
       unselectNotes: action,
+      selectNote: action,
     });
+
+    autorun(() => {
+      const selectedNotes = this.selectedNotes;
+      const value = {
+        selectedNotes: Object.values(selectedNotes).map((note) => note.uuid),
+      };
+      this.persist(value);
+    });
+
+    autorun(() => {
+      if (this.selectedNotesCount === 1) {
+        void this.openNote(Object.keys(this.selectedNotes)[0]);
+      }
+    });
+
+    if (this.application.isLaunched()) {
+      this.loadFromCache();
+    } else {
+      this.application.addEventObserver(async (eventName) => {
+        if (eventName === ApplicationEvent.LocalDataLoaded) {
+          this.loadFromCache();
+        }
+      });
+    }
 
     appEventListeners.push(
       application.streamItems(ContentType.Note, (notes) => {
         runInAction(() => {
           for (const note of notes) {
             if (this.selectedNotes[note.uuid]) {
-              this.selectedNotes[note.uuid] = note as SNNote;
+              this.setNoteAsSelected(note as SNNote);
             }
           }
         });
       })
     );
+  }
+
+  private setNoteAsSelected(note: SNNote): void {
+    this.selectedNotes[note.uuid] = note;
+    this.selectedNoteIds.add(note.uuid);
+  }
+
+  private setNoteAsUnselected(note: SNNote): void {
+    delete this.selectedNotes[note.uuid];
+    this.selectedNoteIds.delete(note.uuid);
+  }
+
+  private setSelectedNotes(notes: SNNote[]): void {
+    const selectedNotes: Record<UuidString, SNNote> = {};
+    for (const note of notes) {
+      selectedNotes[note.uuid] = note;
+    }
+    this.selectedNotes = observable(selectedNotes);
+    this.selectedNoteIds = observable(new Set(Uuids(notes)));
+  }
+
+  private loadFromCache() {
+    const value = this.application.getValue(
+      PersistKey
+    ) as NotesStatePersistable;
+
+    if (!value) {
+      return;
+    }
+
+    const notes = this.application.items
+      .findItems(value.selectedNotes)
+      .filter((note) => note != undefined) as SNNote[];
+
+    this.setSelectedNotes(notes);
+  }
+
+  private persist(value: NotesStatePersistable): void {
+    if (!this.application.isLaunched()) {
+      return;
+    }
+
+    void this.application.setValue(PersistKey, value);
   }
 
   get activeNoteController(): NoteViewController | undefined {
@@ -110,7 +187,7 @@ export class NotesState {
 
     for (const note of authorizedNotes) {
       runInAction(() => {
-        this.selectedNotes[note.uuid] = note;
+        this.setNoteAsSelected(note);
         this.lastSelectedNote = note;
       });
     }
@@ -128,10 +205,10 @@ export class NotesState {
 
     if (userTriggered && (hasMeta || hasCtrl)) {
       if (this.selectedNotes[uuid]) {
-        delete this.selectedNotes[uuid];
+        this.setNoteAsUnselected(this.selectedNotes[uuid]);
       } else if (await this.application.authorizeNoteAccess(note)) {
         runInAction(() => {
-          this.selectedNotes[uuid] = note;
+          this.setNoteAsSelected(note);
           this.lastSelectedNote = note;
         });
       }
@@ -145,16 +222,10 @@ export class NotesState {
         (await this.application.authorizeNoteAccess(note))
       ) {
         runInAction(() => {
-          this.selectedNotes = {
-            [note.uuid]: note,
-          };
+          this.setSelectedNotes([note]);
           this.lastSelectedNote = note;
         });
       }
-    }
-
-    if (this.selectedNotesCount === 1) {
-      await this.openNote(Object.keys(this.selectedNotes)[0]);
     }
   }
 
@@ -339,7 +410,7 @@ export class NotesState {
       if (permanently) {
         for (const note of Object.values(this.selectedNotes)) {
           await this.application.mutator.deleteItem(note);
-          delete this.selectedNotes[note.uuid];
+          this.setNoteAsUnselected(this.selectedNotes[note.uuid]);
         }
       } else {
         await this.changeSelectedNotes((mutator) => {
@@ -371,7 +442,7 @@ export class NotesState {
     });
 
     runInAction(() => {
-      this.selectedNotes = {};
+      this.setSelectedNotes([]);
       this.contextMenuOpen = false;
     });
   }
@@ -388,7 +459,7 @@ export class NotesState {
   }
 
   unselectNotes(): void {
-    this.selectedNotes = {};
+    this.setSelectedNotes([]);
   }
 
   getSpellcheckStateForNote(note: SNNote) {

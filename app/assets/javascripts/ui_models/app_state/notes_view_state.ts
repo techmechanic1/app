@@ -440,11 +440,13 @@ export class NotesViewState {
   };
 
   selectFirstNote = () => {
-    const note = this.getFirstNonProtectedNote();
-    if (note) {
-      this.selectNote(note, false, false);
-      this.resetScrollPosition();
-    }
+    console.warn('selectFirstNote temporarily disabled for proof of concept');
+    return;
+    // const note = this.getFirstNonProtectedNote();
+    // if (note) {
+    //   this.selectNote(note, false, false);
+    //   this.resetScrollPosition();
+    // }
   };
 
   selectNextNote = () => {
