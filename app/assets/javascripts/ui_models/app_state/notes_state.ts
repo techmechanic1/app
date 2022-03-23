@@ -26,15 +26,19 @@ import { AppState } from './app_state';
 
 const PersistKey = 'notes-state';
 interface NotesStatePersistable {
-  selectedNotes: UuidString[];
+  selectedNoteIds: UuidString[];
+  contextMenuOpen: boolean;
+  contextMenuPosition: ContextMenuPosition;
 }
+
+type ContextMenuPosition = { top?: number; left: number; bottom?: number };
 
 export class NotesState {
   lastSelectedNote: SNNote | undefined;
   selectedNotes: Record<UuidString, SNNote> = observable({});
   selectedNoteIds: Set<UuidString> = observable(new Set<UuidString>());
   contextMenuOpen = false;
-  contextMenuPosition: { top?: number; left: number; bottom?: number } = {
+  contextMenuPosition: ContextMenuPosition = {
     top: 0,
     left: 0,
   };
@@ -51,6 +55,7 @@ export class NotesState {
   ) {
     makeObservable(this, {
       selectedNotes: observable,
+      selectedNoteIds: observable,
       contextMenuOpen: observable,
       contextMenuPosition: observable,
       showProtectedWarning: observable,
@@ -67,12 +72,15 @@ export class NotesState {
       setShowRevisionHistoryModal: action,
       unselectNotes: action,
       selectNote: action,
+      setNoteAsSelected: action,
+      setSelectedNotes: action,
     });
 
     autorun(() => {
-      const selectedNotes = this.selectedNotes;
       const value = {
-        selectedNotes: Object.values(selectedNotes).map((note) => note.uuid),
+        selectedNoteIds: Array.from(this.selectedNoteIds),
+        contextMenuOpen: this.contextMenuOpen,
+        contextMenuPosition: this.contextMenuPosition,
       };
       this.persist(value);
     });
@@ -106,25 +114,6 @@ export class NotesState {
     );
   }
 
-  private setNoteAsSelected(note: SNNote): void {
-    this.selectedNotes[note.uuid] = note;
-    this.selectedNoteIds.add(note.uuid);
-  }
-
-  private setNoteAsUnselected(note: SNNote): void {
-    delete this.selectedNotes[note.uuid];
-    this.selectedNoteIds.delete(note.uuid);
-  }
-
-  private setSelectedNotes(notes: SNNote[]): void {
-    const selectedNotes: Record<UuidString, SNNote> = {};
-    for (const note of notes) {
-      selectedNotes[note.uuid] = note;
-    }
-    this.selectedNotes = observable(selectedNotes);
-    this.selectedNoteIds = observable(new Set(Uuids(notes)));
-  }
-
   private loadFromCache() {
     const value = this.application.getValue(
       PersistKey
@@ -134,11 +123,16 @@ export class NotesState {
       return;
     }
 
-    const notes = this.application.items
-      .findItems(value.selectedNotes)
-      .filter((note) => note != undefined) as SNNote[];
+    if (value.selectedNoteIds) {
+      const notes = this.application.items
+        .findItems(value.selectedNoteIds)
+        .filter((note) => note != undefined) as SNNote[];
 
-    this.setSelectedNotes(notes);
+      this.setSelectedNotes(notes);
+    }
+
+    this.contextMenuOpen = value.contextMenuOpen;
+    this.contextMenuPosition = value.contextMenuPosition;
   }
 
   private persist(value: NotesStatePersistable): void {
@@ -147,6 +141,25 @@ export class NotesState {
     }
 
     void this.application.setValue(PersistKey, value);
+  }
+
+  setNoteAsSelected(note: SNNote): void {
+    this.selectedNotes[note.uuid] = note;
+    this.selectedNoteIds.add(note.uuid);
+  }
+
+  setNoteAsUnselected(note: SNNote): void {
+    delete this.selectedNotes[note.uuid];
+    this.selectedNoteIds.delete(note.uuid);
+  }
+
+  setSelectedNotes(notes: SNNote[]): void {
+    const selectedNotes: Record<UuidString, SNNote> = {};
+    for (const note of notes) {
+      selectedNotes[note.uuid] = note;
+    }
+    this.selectedNotes = observable(selectedNotes);
+    this.selectedNoteIds = observable(new Set(Uuids(notes)));
   }
 
   get activeNoteController(): NoteViewController | undefined {
