@@ -33,13 +33,31 @@ import { PanelSide, PanelResizer, PanelResizeType } from '@/Components/PanelResi
 import { ElementIds } from '@/ElementIDs'
 import { ChangeEditorButton } from '@/Components/ChangeEditor/ChangeEditorButton'
 import { AttachedFilesButton } from '@/Components/AttachedFilesPopover/AttachedFilesButton'
+import ContentEditable, { ContentEditableEvent } from 'react-contenteditable'
 
 const MINIMUM_STATUS_DURATION = 400
 const TEXTAREA_DEBOUNCE = 100
+const NoteLinkRegex = /\[\[[\w\d-]+\]\]/g
 
 type NoteStatus = {
   message?: string
   desc?: string
+}
+
+const getAllIndicesOfSubstring = (string: string, substring: string) => {
+  const indices = []
+  let occurence = string.indexOf(substring, 0)
+
+  while (occurence >= 0) {
+    indices.push(occurence)
+    occurence = string.indexOf(substring, occurence + 1)
+  }
+
+  return indices
+}
+
+const replaceAt = (string: string, index: number, replacement: string) => {
+  return string.substr(0, index) + replacement + string.substr(index + replacement.length)
 }
 
 function sortAlphabetically(array: SNComponent[]): SNComponent[] {
@@ -530,10 +548,28 @@ export class NoteView extends PureComponent<Props, State> {
     }
   }
 
-  onTextAreaChange = ({ currentTarget }: JSX.TargetedEvent<HTMLTextAreaElement, Event>) => {
-    const text = currentTarget.value
+  onTextAreaChange = (event: ContentEditableEvent) => {
+    let initialValue = event.target.value
+    const matches = new Set(initialValue.match(NoteLinkRegex))
+    if (matches) {
+      matches.forEach((match) => {
+        const indices = getAllIndicesOfSubstring(initialValue, match)
+        const noteUuid = match.replace(/[[\]]/g, '')
+        const note = this.application.items.findItem(noteUuid)
+
+        if (note) {
+          indices.forEach((index) => {
+            initialValue = replaceAt(
+              initialValue,
+              index,
+              `&nbsp;<a data-note="${noteUuid}" class="cursor-pointer" contenteditable="false">${note.title}</a>&nbsp;`,
+            )
+          })
+        }
+      })
+    }
     this.setState({
-      editorText: text,
+      editorText: initialValue,
     })
     this.textAreaChangeDebounceSave()
   }
@@ -782,7 +818,15 @@ export class NoteView extends PureComponent<Props, State> {
     editor.scrollTop = this.scrollPosition
   }
 
-  onSystemEditorLoad = (ref: HTMLTextAreaElement | null) => {
+  onClick = (event: MouseEvent) => {
+    const noteUuid = (event.target as HTMLAnchorElement).dataset.note
+    if (noteUuid) {
+      console.log(noteUuid)
+      void this.appState.notes.selectNote(noteUuid, true)
+    }
+  }
+
+  onSystemEditorLoad = (ref: HTMLDivElement | null) => {
     if (this.removeTabObserver || !ref) {
       return
     }
@@ -799,44 +843,45 @@ export class NoteView extends PureComponent<Props, State> {
       return
     }
 
-    this.removeTabObserver = this.application.io.addKeyObserver({
-      element: editor,
-      key: KeyboardKey.Tab,
-      onKeyDown: (event) => {
-        if (document.hidden || this.note.locked || event.shiftKey) {
-          return
-        }
-        event.preventDefault()
-        /** Using document.execCommand gives us undo support */
-        const insertSuccessful = document.execCommand('insertText', false, '\t')
-        if (!insertSuccessful) {
-          /** document.execCommand works great on Chrome/Safari but not Firefox */
-          const start = editor.selectionStart || 0
-          const end = editor.selectionEnd || 0
-          const spaces = '    '
-          /** Insert 4 spaces */
-          editor.value = editor.value.substring(0, start) + spaces + editor.value.substring(end)
-          /** Place cursor 4 spaces away from where the tab key was pressed */
-          editor.selectionStart = editor.selectionEnd = start + 4
-        }
-        this.setState({
-          editorText: editor.value,
-        })
+    // this.removeTabObserver = this.application.io.addKeyObserver({
+    //   element: editor,
+    //   key: KeyboardKey.Tab,
+    //   onKeyDown: (event) => {
+    //     if (document.hidden || this.note.locked || event.shiftKey) {
+    //       return
+    //     }
+    //     event.preventDefault()
+    //     /** Using document.execCommand gives us undo support */
+    //     const insertSuccessful = document.execCommand('insertText', false, '\t')
+    //     if (!insertSuccessful) {
+    //       /** document.execCommand works great on Chrome/Safari but not Firefox */
+    //       const start = editor.selectionStart || 0
+    //       const end = editor.selectionEnd || 0
+    //       const spaces = '    '
+    //       /** Insert 4 spaces */
+    //       editor.value = editor.value.substring(0, start) + spaces + editor.value.substring(end)
+    //       /** Place cursor 4 spaces away from where the tab key was pressed */
+    //       editor.selectionStart = editor.selectionEnd = start + 4
+    //     }
+    //     this.setState({
+    //       editorText: editor.value,
+    //     })
 
-        this.controller
-          .save({
-            editorValues: {
-              title: this.state.editorTitle,
-              text: this.state.editorText,
-            },
-            bypassDebouncer: true,
-          })
-          .catch(console.error)
-      },
-    })
+    //     this.controller
+    //       .save({
+    //         editorValues: {
+    //           title: this.state.editorTitle,
+    //           text: this.state.editorText,
+    //         },
+    //         bypassDebouncer: true,
+    //       })
+    //       .catch(console.error)
+    //   },
+    // })
 
     editor.addEventListener('scroll', this.setScrollPosition)
     editor.addEventListener('input', this.resetScrollPosition)
+    editor.addEventListener('click', this.onClick)
 
     const observer = new MutationObserver((records) => {
       for (const record of records) {
@@ -847,6 +892,7 @@ export class NoteView extends PureComponent<Props, State> {
             this.removeTabObserver = undefined
             editor.removeEventListener('scroll', this.setScrollPosition)
             editor.removeEventListener('scroll', this.resetScrollPosition)
+            editor.removeEventListener('click', this.onClick)
             this.scrollPosition = 0
           }
         }
@@ -1006,18 +1052,18 @@ export class NoteView extends PureComponent<Props, State> {
             )}
 
             {this.state.editorStateDidLoad && !this.state.editorComponentViewer && !this.state.textareaUnloading && (
-              <textarea
-                autocomplete="off"
+              <ContentEditable
+                /* autocomplete="off" */
                 className="editable font-editor"
                 dir="auto"
                 id={ElementIds.NoteTextEditor}
                 onChange={this.onTextAreaChange}
-                value={this.state.editorText}
-                readonly={this.state.noteLocked}
+                html={this.state.editorText}
+                disabled={this.state.noteLocked}
                 onFocus={this.onContentFocus}
-                spellcheck={this.state.spellcheck}
+                /* spellcheck={this.state.spellcheck} */
                 ref={(ref) => this.onSystemEditorLoad(ref)}
-              ></textarea>
+              />
             )}
 
             {this.state.marginResizersEnabled && this.editorContentRef.current ? (

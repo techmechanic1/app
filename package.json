@@ -79,9 +79,11 @@
     "mobx-react-lite": "^3.3.0",
     "preact": "^10.7.1",
     "qrcode.react": "^3.0.1",
+    "react-contenteditable": "^3.3.6",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
-    "react-dnd-touch-backend": "^16.0.1"
+    "react-dnd-touch-backend": "^16.0.1",
+    "sanitize-html": "^2.7.0"
   },
   "lint-staged": {
     "app/**/*.{js,ts,jsx,tsx}": "eslint --cache --fix",
