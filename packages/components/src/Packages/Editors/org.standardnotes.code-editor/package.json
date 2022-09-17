@@ -19,7 +19,7 @@
     "@babel/core": "^7.12.10",
     "@babel/preset-env": "^7.12.11",
     "@standardnotes/component-relay": "2.2.0",
-    "codemirror": "5.65.2",
+    "codemirror": "6.0.1",
     "copy-webpack-plugin": "*",
     "css-loader": "^5.0.1",
     "eslint": "*",
