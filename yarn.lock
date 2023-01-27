@@ -6341,7 +6341,7 @@ __metadata:
     lexical: 0.7.6
     lint-staged: ">=13"
     mini-css-extract-plugin: ^2.7.2
-    minimatch: ^5.1.1
+    minimatch: ^6.1.6
     mobx: ^6.7.0
     mobx-react-lite: ^3.4.0
     node-sass: ^8.0.0
@@ -21152,12 +21152,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimatch@npm:^5.1.1":
-  version: 5.1.1
-  resolution: "minimatch@npm:5.1.1"
+"minimatch@npm:^6.1.6":
+  version: 6.1.6
+  resolution: "minimatch@npm:6.1.6"
   dependencies:
     brace-expansion: ^2.0.1
-  checksum: 215edd0978320a3354188f84a537d45841f2449af4df4379f79b9b777e71aa4f5722cc9d1717eabd2a70d38ef76ab7b708d24d83ea6a6c909dfd8833de98b437
+  checksum: 707b026e0adc610be6c02f24173d84811e5b8cc2e434881e47ef00a72be5fbea9323b7158d7bf065782b1e1d5c50d7d80cd72f2602255f2fddfb1d2f02e9092c
   languageName: node
   linkType: hard
 
