@@ -64,6 +64,6 @@
     "react-native-share": "^8.0.0",
     "react-native-version-info": "^1.1.1",
     "react-native-webview": "11.23.1",
-    "typescript": "^4.9.3"
+    "typescript": "^5.0.3"
   }
 }
